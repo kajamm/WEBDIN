@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// Models for CRUD Manajemen Karyawan
+model Department {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  positions Position[]
+  employees Employee[]
+  createdAt DateTime   @default(now())
+}
+
+model Position {
+  id           Int        @id @default(autoincrement())
+  name         String
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId Int
+  employees    Employee[]
+  createdAt    DateTime   @default(now())
+}
+
+model Skill {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  employees EmployeeSkill[]
+}
+
+model Employee {
+  id           Int             @id @default(autoincrement())
+  name         String
+  email        String          @unique
+  phone        String?
+  photo        String?
+  department   Department?     @relation(fields: [departmentId], references: [id])
+  departmentId Int?
+  position     Position?       @relation(fields: [positionId], references: [id])
+  positionId   Int?
+  skills       EmployeeSkill[]
+  gender       Gender?
+  status       Status?
+  createdAt    DateTime        @default(now())
+}
+
+model EmployeeSkill {
+  id         Int      @id @default(autoincrement())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId Int
+  skill      Skill    @relation(fields: [skillId], references: [id])
+  skillId    Int
+
+  @@unique([employeeId, skillId])
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Status {
+  ACTIVE
+  PROBATION
+  INACTIVE
+}

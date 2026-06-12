@@ -34,3 +34,27 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Setup lokal (MySQL + Prisma)
+
+1. Salin `.env.example` ke `.env` dan atur `DATABASE_URL` ke MySQL Anda.
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Jalankan migrasi Prisma dan generate client:
+
+```bash
+npx prisma migrate dev --name init
+```
+
+4. Jalankan aplikasi:
+
+```bash
+npm run dev
+```
+
+Halaman utama menyediakan form tambah karyawan, upload foto (disimpan di `public/uploads`), cascading dropdown Departemen→Jabatan, dan multi-skill. Gunakan endpoint `/api/meta` untuk seed data awal.
