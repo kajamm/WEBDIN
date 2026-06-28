@@ -23,16 +23,23 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null)
 
   useEffect(() => {
-    const load = async () => {
-      await fetchMeta()
-      await fetchEmployees(1)
-    }
-    load()
-  }, [])
+  console.log("USE EFFECT JALAN")
+
+  const load = async () => {
+    console.log("LOAD JALAN")
+
+    await fetchMeta()
+    await fetchEmployees()
+  }
+
+  load()
+}, [])
 
   async function fetchMeta() {
     try {
+      
       console.log('[FETCH] /api/meta')
+      console.log("HOME COMPONENT RENDER")
       const res = await fetch('/api/meta')
       const data = await res.json()
       console.log('[RESPONSE] /api/meta:', data)
@@ -87,6 +94,7 @@ export default function Home() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    console.log("SUBMIT DIKLIK")
     const fd = new FormData()
     fd.append('name', form.name)
     fd.append('email', form.email)
@@ -242,6 +250,7 @@ export default function Home() {
       <table className="w-full border-collapse border border-gray-300 rounded shadow-sm overflow-hidden">
         <thead className="bg-gray-100">
           <tr>
+            <th className="border p-2 text-left">Foto</th>
             <th className="border p-2 text-left">ID</th>
             <th className="border p-2 text-left">Nama</th>
             <th className="border p-2 text-left">Email</th>
@@ -258,6 +267,19 @@ export default function Home() {
           ) : (
             employees.map((emp: any) => (
               <tr key={emp.id} className="hover:bg-gray-50">
+                <td className="border p-2">
+      {emp.photo ? (
+        <img
+          src={emp.photo}
+          alt={emp.name}
+          className="w-16 h-16 object-cover rounded border"
+        />
+      ) : (
+        <span className="text-gray-400 text-xs">
+          No Photo
+        </span>
+      )}
+                </td>
                 <td className="border p-2">{emp.id}</td>
                 <td className="border p-2 font-medium">{emp.name}</td>
                 <td className="border p-2">{emp.email}</td>
