@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import MahasiswaForm from '../../components/MahasiswaForm';
 import { 
   getMahasiswa, 
@@ -10,10 +11,14 @@ import {
   Prodi,
   MetaData
 } from '../../lib/api';
+import { logout, getUser, getToken } from '../../lib/auth';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 export default function MahasiswaPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [isClient, setIsClient] = useState(false);
   // Main Data States
   const [mahasiswa, setMahasiswa] = useState<Mahasiswa[]>([]);
   const [prodiList, setProdiList] = useState<Prodi[]>([]);
@@ -39,6 +44,18 @@ export default function MahasiswaPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMahasiswa, setEditingMahasiswa] = useState<Mahasiswa | null>(null);
 
+  // Cek autentikasi di client-side
+  useEffect(() => {
+    setIsClient(true);
+    const token = getToken();
+    const currentUser = getUser();
+    if (!token || !currentUser) {
+      router.push('/login');
+    } else {
+      setUser(currentUser);
+    }
+  }, [router]);
+
   // Load Program Studi dynamically from Express API
   const fetchProdiData = async () => {
     try {
@@ -46,8 +63,12 @@ export default function MahasiswaPage() {
       if (res.success) {
         setProdiList(res.data || []);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Koneksi backend gagal saat memuat prodi:', err);
+      if (err.message?.includes('Token') || err.message?.includes('expired') || err.message?.includes('Unauthorized') || err.message?.includes('Akses ditolak')) {
+        logout();
+        router.push('/login');
+      }
     }
   };
 
@@ -71,19 +92,27 @@ export default function MahasiswaPage() {
     } catch (err: any) {
       console.error('Error fetching data:', err);
       setError(err.message || 'Terjadi kesalahan saat menghubungi backend API.');
+      if (err.message?.includes('Token') || err.message?.includes('expired') || err.message?.includes('Unauthorized') || err.message?.includes('Akses ditolak')) {
+        logout();
+        router.push('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Load initial references
+  // Load initial references hanya jika sudah terautentikasi
   useEffect(() => {
-    fetchProdiData();
+    if (getToken()) {
+      fetchProdiData();
+    }
   }, []);
 
-  // Fetch student data on changes to page, searchQuery, selectedProdiId
+  // Fetch student data on changes to page, searchQuery, selectedProdiId hanya jika sudah terautentikasi
   useEffect(() => {
-    fetchMahasiswaData();
+    if (getToken()) {
+      fetchMahasiswaData();
+    }
   }, [page, searchQuery, selectedProdiId]);
 
   // Reset to first page when search keyword is cleared
@@ -148,6 +177,22 @@ export default function MahasiswaPage() {
     return `${BACKEND_URL}/${cleanPath.replace(/^\/?/, '')}`;
   };
 
+  const handleLogoutClick = () => {
+    if (confirm('Apakah Anda yakin ingin logout?')) {
+      logout();
+      router.push('/login');
+    }
+  };
+
+  // Jangan render konten jika belum selesai check auth di client-side
+  if (!isClient || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-10 font-sans text-slate-800 dark:text-slate-200">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -161,16 +206,31 @@ export default function MahasiswaPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               Sistem CRUD Next.js & Express.js untuk data Mahasiswa.
             </p>
+            {user && (
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                Login sebagai: <strong className="text-slate-600 dark:text-slate-300">{user.name}</strong> ({user.email}) - <span className="uppercase text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-blue-600 dark:text-blue-400 font-bold">{user.role}</span>
+              </p>
+            )}
           </div>
-          <div>
+          <div className="flex items-center gap-3">
             <button
               onClick={handleAddClick}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none cursor-pointer"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
               Tambah Mahasiswa
+            </button>
+            <button
+              onClick={handleLogoutClick}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold rounded-xl border border-rose-100 dark:border-rose-900/30 transition-all duration-200 focus:outline-none cursor-pointer"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013-3v1" />
+              </svg>
+              Logout
             </button>
           </div>
         </div>

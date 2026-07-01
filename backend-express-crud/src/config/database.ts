@@ -48,6 +48,7 @@ export const initDb = async () => {
       await connection.query('SET FOREIGN_KEY_CHECKS = 0');
       await connection.query('DROP TABLE IF EXISTS mahasiswa');
       await connection.query('DROP TABLE IF EXISTS prodi');
+      await connection.query('DROP TABLE IF EXISTS users');
       await connection.query('SET FOREIGN_KEY_CHECKS = 1');
     }
 
@@ -75,7 +76,20 @@ export const initDb = async () => {
       ) ENGINE=InnoDB;
     `);
 
-    // 5. Seed default Program Studi if empty
+    // 5. Create users table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role ENUM('admin', 'operator', 'viewer') NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB;
+    `);
+
+    // 6. Seed default Program Studi if empty
     const [rows]: any = await connection.query('SELECT COUNT(*) as count FROM prodi');
     if (rows[0].count === 0) {
       await connection.query(`

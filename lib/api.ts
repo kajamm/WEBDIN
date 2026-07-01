@@ -1,3 +1,5 @@
+import { getToken } from './auth';
+
 export interface Mahasiswa {
   id?: number;
   nim: string;
@@ -30,6 +32,15 @@ export interface ApiResponse<T> {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
+// Helper untuk menambahkan header Authorization
+function getAuthHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const token = getToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function getMahasiswa(params: {
   search?: string;
   prodi_id?: string | number;
@@ -42,7 +53,9 @@ export async function getMahasiswa(params: {
   if (params.search?.trim()) urlParams.append('search', params.search.trim());
   if (params.prodi_id) urlParams.append('prodi_id', params.prodi_id.toString());
 
-  const response = await fetch(`${BACKEND_URL}/api/mahasiswa?${urlParams.toString()}`);
+  const response = await fetch(`${BACKEND_URL}/api/mahasiswa?${urlParams.toString()}`, {
+    headers: getAuthHeaders()
+  });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || 'Gagal memuat data mahasiswa dari server');
@@ -53,6 +66,7 @@ export async function getMahasiswa(params: {
 export async function createMahasiswa(formData: FormData): Promise<ApiResponse<Mahasiswa>> {
   const response = await fetch(`${BACKEND_URL}/api/mahasiswa`, {
     method: 'POST',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -65,6 +79,7 @@ export async function createMahasiswa(formData: FormData): Promise<ApiResponse<M
 export async function updateMahasiswa(id: number | string, formData: FormData): Promise<ApiResponse<Mahasiswa>> {
   const response = await fetch(`${BACKEND_URL}/api/mahasiswa/${id}`, {
     method: 'PUT',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -77,6 +92,7 @@ export async function updateMahasiswa(id: number | string, formData: FormData): 
 export async function deleteMahasiswa(id: number | string): Promise<ApiResponse<null>> {
   const response = await fetch(`${BACKEND_URL}/api/mahasiswa/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders()
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -86,7 +102,9 @@ export async function deleteMahasiswa(id: number | string): Promise<ApiResponse<
 }
 
 export async function getProdiList(): Promise<ApiResponse<Prodi[]>> {
-  const response = await fetch(`${BACKEND_URL}/api/prodi`);
+  const response = await fetch(`${BACKEND_URL}/api/prodi`, {
+    headers: getAuthHeaders()
+  });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || 'Gagal memuat data program studi');
