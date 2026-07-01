@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import mahasiswaRoutes from './routes/mahasiswa.route';
 import prodiRoutes from './routes/prodi.route';
+import authRoutes from './routes/auth.route';
 
 const app = express();
 
@@ -10,7 +11,7 @@ const app = express();
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Express built-in body parsers
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/mahasiswa', mahasiswaRoutes);
 app.use('/api/prodi', prodiRoutes);
 
