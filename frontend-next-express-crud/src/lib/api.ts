@@ -111,3 +111,77 @@ export async function getProdiList(): Promise<ApiResponse<Prodi[]>> {
   }
   return response.json();
 }
+
+export interface UserData {
+  id?: number;
+  name: string;
+  email: string;
+  role: string;
+  created_at?: string;
+}
+
+export async function getUsers(): Promise<ApiResponse<UserData[]>> {
+  const response = await fetch(`${BACKEND_URL}/api/users`, {
+    headers: getAuthHeaders()
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Gagal memuat data user dari server');
+  }
+  return response.json();
+}
+
+export async function createUser(data: Omit<UserData, 'id' | 'created_at'> & { password?: string }): Promise<ApiResponse<UserData>> {
+  const response = await fetch(`${BACKEND_URL}/api/users`, {
+    method: 'POST',
+    headers: getAuthHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Gagal menambahkan user');
+  }
+  return response.json();
+}
+
+export async function updateUser(id: number | string, data: Omit<UserData, 'id' | 'created_at'>): Promise<ApiResponse<UserData>> {
+  const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Gagal memperbarui user');
+  }
+  return response.json();
+}
+
+export async function deleteUser(id: number | string): Promise<ApiResponse<null>> {
+  const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Gagal menghapus user');
+  }
+  return response.json();
+}
+
+export async function resetUserPassword(id: number | string): Promise<{ message: string; temporaryPassword: string }> {
+  const response = await fetch(`${BACKEND_URL}/api/users/${id}/reset-password`, {
+    method: 'PATCH',
+    headers: getAuthHeaders()
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Gagal mereset password');
+  }
+  return response.json();
+}
+

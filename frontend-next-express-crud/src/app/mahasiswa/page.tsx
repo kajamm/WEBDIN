@@ -178,9 +178,12 @@ export default function MahasiswaPage() {
   };
 
   const handleLogoutClick = () => {
-    if (confirm('Apakah Anda yakin ingin logout?')) {
-      logout();
-      router.push('/login');
+    if (typeof window !== 'undefined') {
+      const isConfirmed = window.confirm('Apakah Anda yakin ingin logout?');
+      if (isConfirmed) {
+        logout();
+        router.push('/login');
+      }
     }
   };
 
@@ -214,6 +217,17 @@ export default function MahasiswaPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {user && user.role === 'admin' && (
+              <button
+                onClick={() => router.push('/users')}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold rounded-xl shadow-sm transition-all duration-200 focus:outline-none cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                Kelola User
+              </button>
+            )}
             <button
               onClick={handleAddClick}
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none cursor-pointer"
