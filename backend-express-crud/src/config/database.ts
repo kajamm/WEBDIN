@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 
 dotenv.config();
 
@@ -88,6 +89,17 @@ export const initDb = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB;
     `);
+
+    // 5.5. Seed default Admin if users table is empty (Optional - for local testing convenience)
+    const [userRows]: any = await connection.query('SELECT COUNT(*) as count FROM users');
+    if (userRows[0].count === 0) {
+      const adminPassword = await bcrypt.hash('admin123', 10);
+      await connection.query(`
+        INSERT INTO users (name, email, password, role) VALUES 
+        ('Admin', 'admin@example.com', ?, 'admin')
+      `, [adminPassword]);
+      console.log('Default Admin user seeded (admin@example.com / admin123).');
+    }
 
     // 6. Seed default Program Studi if empty
     const [rows]: any = await connection.query('SELECT COUNT(*) as count FROM prodi');

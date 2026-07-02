@@ -4,13 +4,14 @@ import path from 'path';
 import mahasiswaRoutes from './routes/mahasiswa.route';
 import prodiRoutes from './routes/prodi.route';
 import authRoutes from './routes/auth.route';
+import userRoutes from './routes/user.route';
 
 const app = express();
 
 // Configure CORS to accept requests from our Next.js frontend (ports 3000 and 3001)
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -25,6 +26,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/mahasiswa', mahasiswaRoutes);
 app.use('/api/prodi', prodiRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Backend Express.js CRUD Mahasiswa berjalan' });
