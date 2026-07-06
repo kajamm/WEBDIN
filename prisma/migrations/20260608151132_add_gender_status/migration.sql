@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE `employee` ADD COLUMN `gender` ENUM('MALE', 'FEMALE') NULL,
-    ADD COLUMN `status` ENUM('ACTIVE', 'PROBATION', 'INACTIVE') NULL;

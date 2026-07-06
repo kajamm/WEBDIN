@@ -1,187 +1,168 @@
-import { getToken } from './auth';
+// [Pertemuan 12 - Bagian 9: Integrasi Frontend Next.js: Helper API]
+// + [Pertemuan 13 - Bagian 10] semua request protected disisipi header
+//   Authorization: Bearer <token>
+// + [Pertemuan 15 - Bagian 9] helper untuk CRUD user (khusus admin)
+import { getToken } from "./auth";
 
-export interface Mahasiswa {
-  id?: number;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ---------------- MAHASISWA ----------------
+
+export type Mahasiswa = {
+  id: number;
   nim: string;
   nama: string;
   prodi_id: number;
-  nama_prodi?: string;
-  angkatan: string;
-  foto: string | null;
-}
-
-export interface Prodi {
-  id: number;
   nama_prodi: string;
-  created_at?: string;
-}
-
-export interface MetaData {
-  page: number;
-  limit: number;
-  total: number;
-  totalPage: number;
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  message: string;
-  data: T;
-  meta?: MetaData;
-}
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-// Helper untuk menambahkan header Authorization
-function getAuthHeaders(headers: Record<string, string> = {}): Record<string, string> {
-  const token = getToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
+  angkatan: number;
+  foto?: string | null;
+};
 
 export async function getMahasiswa(params: {
   search?: string;
-  prodi_id?: string | number;
+  prodi_id?: string;
   page?: number;
   limit?: number;
-}): Promise<ApiResponse<Mahasiswa[]>> {
-  const urlParams = new URLSearchParams();
-  if (params.page) urlParams.append('page', params.page.toString());
-  if (params.limit) urlParams.append('limit', params.limit.toString());
-  if (params.search?.trim()) urlParams.append('search', params.search.trim());
-  if (params.prodi_id) urlParams.append('prodi_id', params.prodi_id.toString());
+}) {
+  const query = new URLSearchParams();
 
-  const response = await fetch(`${BACKEND_URL}/api/mahasiswa?${urlParams.toString()}`, {
-    headers: getAuthHeaders()
+  if (params.search) query.set("search", params.search);
+  if (params.prodi_id) query.set("prodi_id", params.prodi_id);
+  if (params.page) query.set("page", String(params.page));
+  if (params.limit) query.set("limit", String(params.limit));
+
+  const response = await fetch(`${API_URL}/mahasiswa?${query.toString()}`, {
+    headers: { ...authHeaders() },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal memuat data mahasiswa dari server');
-  }
-  return response.json();
+  const result = await response.json();
+
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function createMahasiswa(formData: FormData): Promise<ApiResponse<Mahasiswa>> {
-  const response = await fetch(`${BACKEND_URL}/api/mahasiswa`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
+export async function createMahasiswa(formData: FormData) {
+  const response = await fetch(`${API_URL}/mahasiswa`, {
+    method: "POST",
+    headers: { ...authHeaders() },
     body: formData,
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal menambahkan data mahasiswa');
-  }
-  return response.json();
+
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function updateMahasiswa(id: number | string, formData: FormData): Promise<ApiResponse<Mahasiswa>> {
-  const response = await fetch(`${BACKEND_URL}/api/mahasiswa/${id}`, {
-    method: 'PUT',
-    headers: getAuthHeaders(),
+export async function updateMahasiswa(id: number, formData: FormData) {
+  const response = await fetch(`${API_URL}/mahasiswa/${id}`, {
+    method: "PUT",
+    headers: { ...authHeaders() },
     body: formData,
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal memperbarui data mahasiswa');
-  }
-  return response.json();
+
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function deleteMahasiswa(id: number | string): Promise<ApiResponse<null>> {
-  const response = await fetch(`${BACKEND_URL}/api/mahasiswa/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders()
+export async function deleteMahasiswa(id: number) {
+  const response = await fetch(`${API_URL}/mahasiswa/${id}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal menghapus data mahasiswa');
-  }
-  return response.json();
+
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function getProdiList(): Promise<ApiResponse<Prodi[]>> {
-  const response = await fetch(`${BACKEND_URL}/api/prodi`, {
-    headers: getAuthHeaders()
+// ---------------- PRODI ----------------
+
+export type Prodi = {
+  id: number;
+  nama_prodi: string;
+};
+
+export async function getProdi(): Promise<{ data: Prodi[] }> {
+  const response = await fetch(`${API_URL}/prodi`, {
+    headers: { ...authHeaders() },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal memuat data program studi');
-  }
-  return response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export interface UserData {
-  id?: number;
+// ---------------- USERS (khusus admin) ----------------
+// [Pertemuan 15 - Bagian 9: Frontend Halaman CRUD User]
+
+export type UserAccount = {
+  id: number;
   name: string;
   email: string;
+  role: "admin" | "operator" | "viewer";
+  created_at: string;
+};
+
+export async function getUsers(): Promise<{ data: UserAccount[] }> {
+  const response = await fetch(`${API_URL}/users`, {
+    headers: { ...authHeaders() },
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
+}
+
+export async function createUserAccount(payload: {
+  name: string;
+  email: string;
+  password: string;
   role: string;
-  created_at?: string;
-}
-
-export async function getUsers(): Promise<ApiResponse<UserData[]>> {
-  const response = await fetch(`${BACKEND_URL}/api/users`, {
-    headers: getAuthHeaders()
+}) {
+  const response = await fetch(`${API_URL}/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal memuat data user dari server');
-  }
-  return response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function createUser(data: Omit<UserData, 'id' | 'created_at'> & { password?: string }): Promise<ApiResponse<UserData>> {
-  const response = await fetch(`${BACKEND_URL}/api/users`, {
-    method: 'POST',
-    headers: getAuthHeaders({
-      'Content-Type': 'application/json'
-    }),
-    body: JSON.stringify(data),
+export async function updateUserAccount(
+  id: number,
+  payload: { name: string; email: string; role: string }
+) {
+  const response = await fetch(`${API_URL}/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal menambahkan user');
-  }
-  return response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function updateUser(id: number | string, data: Omit<UserData, 'id' | 'created_at'>): Promise<ApiResponse<UserData>> {
-  const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
-    method: 'PUT',
-    headers: getAuthHeaders({
-      'Content-Type': 'application/json'
-    }),
-    body: JSON.stringify(data),
+export async function deleteUserAccount(id: number) {
+  const response = await fetch(`${API_URL}/users/${id}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal memperbarui user');
-  }
-  return response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
 
-export async function deleteUser(id: number | string): Promise<ApiResponse<null>> {
-  const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders()
+// [Pertemuan 15 - Bagian 5 & 9] Reset password oleh admin
+export async function resetUserPassword(id: number) {
+  const response = await fetch(`${API_URL}/users/${id}/reset-password`, {
+    method: "PATCH",
+    headers: { ...authHeaders() },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal menghapus user');
-  }
-  return response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result;
 }
-
-export async function resetUserPassword(id: number | string): Promise<{ message: string; temporaryPassword: string }> {
-  const response = await fetch(`${BACKEND_URL}/api/users/${id}/reset-password`, {
-    method: 'PATCH',
-    headers: getAuthHeaders()
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Gagal mereset password');
-  }
-  return response.json();
-}
-

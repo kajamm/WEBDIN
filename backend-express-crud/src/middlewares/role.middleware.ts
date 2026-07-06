@@ -1,25 +1,32 @@
-import { Response, NextFunction } from 'express';
-import { AuthRequest } from './auth.middleware';
+// [Pertemuan 14 - Bagian 2: Middleware Role]
+// Dipakai setelah authMiddleware. Membatasi endpoint berdasarkan role
+// yang sudah didekode dari JWT (req.user.role).
+//
+// Matriks akses (Pertemuan 14 - Bagian 3):
+// | Endpoint                              | Admin | Operator | Viewer |
+// |----------------------------------------|-------|----------|--------|
+// | GET    /api/mahasiswa                  |  Ya   |    Ya    |   Ya   |
+// | POST   /api/mahasiswa                  |  Ya   |    Ya    |  Tidak |
+// | PUT    /api/mahasiswa/:id              |  Ya   |    Ya    |  Tidak |
+// | DELETE /api/mahasiswa/:id              |  Ya   |   Tidak  |  Tidak |
+// | GET    /api/users                      |  Ya   |   Tidak  |  Tidak |
+// | POST   /api/users                      |  Ya   |   Tidak  |  Tidak |
+// | PATCH  /api/users/:id/reset-password    |  Ya   |   Tidak  |  Tidak |
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "./auth.middleware";
 
-export const roleMiddleware = (allowedRoles: string[]) => {
+export const allowRoles = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    // 1. Cek apakah req.user di-populate oleh authMiddleware
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Akses ditolak, silakan login terlebih dahulu'
-      });
+      return res.status(401).json({ message: "User belum login" });
     }
 
-    // 2. Cek apakah role user diizinkan
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({
-        success: false,
-        message: 'Forbidden: Anda tidak memiliki akses untuk resource ini'
+        message: "Anda tidak memiliki akses ke fitur ini",
       });
     }
 
-    // 3. Lanjutkan request
     next();
   };
 };

@@ -1,19 +1,25 @@
-import { Request, Response } from 'express';
-import pool from '../config/database';
+// [Pertemuan 12 - Bagian 5: Route Prodi] — versi Prisma
+// Sebelumnya: db.query("SELECT id, nama_prodi FROM prodi ORDER BY nama_prodi ASC")
+// Sekarang:   prisma.prodi.findMany({ orderBy: ... })
+import { Request, Response } from "express";
+import prisma from "../config/prisma";
 
 export const getAllProdi = async (req: Request, res: Response) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM prodi ORDER BY nama_prodi ASC');
-    return res.status(200).json({
-      success: true,
-      message: 'Data prodi berhasil diambil',
-      data: rows
+    const prodi = await prisma.prodi.findMany({
+      orderBy: { namaProdi: "asc" },
+      select: { id: true, namaProdi: true },
     });
-  } catch (error: any) {
-    console.error('Error fetching prodi:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Gagal mengambil data prodi'
+
+    // Map balik ke snake_case (nama_prodi) supaya kontrak JSON API tetap
+    // sama seperti sebelumnya dan frontend (lib/api.ts) tidak perlu diubah.
+    const data = prodi.map((p) => ({ id: p.id, nama_prodi: p.namaProdi }));
+
+    res.json({
+      message: "Data prodi berhasil diambil",
+      data,
     });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };

@@ -1,490 +1,436 @@
-'use client';
+// Halaman ini menggabungkan:
+// - [Pertemuan 12 - Bagian 9, 10, 11] fetch data, tampilkan foto, search/filter/pagination
+// - [Pertemuan 13] protected route: redirect ke /login kalau belum ada token
+// - [Pertemuan 14 - Bagian 6] tombol Tambah/Edit/Hapus disembunyikan sesuai role
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import MahasiswaForm from '../../components/MahasiswaForm';
-import { 
-  getMahasiswa, 
-  deleteMahasiswa, 
-  getProdiList, 
-  Mahasiswa, 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  getMahasiswa,
+  createMahasiswa,
+  updateMahasiswa,
+  deleteMahasiswa,
+  getProdi,
+  Mahasiswa,
   Prodi,
-  MetaData
-} from '../../lib/api';
-import { logout, getUser, getToken } from '../../lib/auth';
+} from "../../lib/api";
+import { getToken, getUser, logout } from "../../lib/auth";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function MahasiswaPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [isClient, setIsClient] = useState(false);
-  // Main Data States
+
   const [mahasiswa, setMahasiswa] = useState<Mahasiswa[]>([]);
-  const [prodiList, setProdiList] = useState<Prodi[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [prodi, setProdi] = useState<Prodi[]>([]);
 
-  // Search & Filter States
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProdiId, setSelectedProdiId] = useState('');
-
-  // Pagination States
+  // [Pertemuan 12 - Bagian 11] state search, filter, pagination
+  const [search, setSearch] = useState("");
+  const [prodiId, setProdiId] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(8); // items per page
-  const [meta, setMeta] = useState<MetaData>({
-    page: 1,
-    limit: 8,
-    total: 0,
-    totalPage: 1
+  const [limit] = useState(10);
+  const [totalPage, setTotalPage] = useState(1);
+
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Mahasiswa | null>(null);
+  const [formData, setFormData] = useState({
+    nim: "",
+    nama: "",
+    prodi_id: "",
+    angkatan: "",
   });
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
 
-  // Form Modal States
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingMahasiswa, setEditingMahasiswa] = useState<Mahasiswa | null>(null);
+  // [Pertemuan 14 - Bagian 6] role dari user yang login menentukan tombol apa yang tampil
+  const user = getUser();
+  const role = user?.role;
+  const canCreate = role === "admin" || role === "operator";
+  const canEdit = role === "admin" || role === "operator";
+  const canDelete = role === "admin";
 
-  // Cek autentikasi di client-side
+  // [Pertemuan 13] Protected route di sisi frontend: kalau belum login, tendang ke /login
   useEffect(() => {
-    setIsClient(true);
-    const token = getToken();
-    const currentUser = getUser();
-    if (!token || !currentUser) {
-      router.push('/login');
-    } else {
-      setUser(currentUser);
+    if (!getToken()) {
+      router.push("/login");
     }
   }, [router]);
 
-  // Load Program Studi dynamically from Express API
-  const fetchProdiData = async () => {
+  const loadMahasiswa = async () => {
     try {
-      const res = await getProdiList();
-      if (res.success) {
-        setProdiList(res.data || []);
-      }
-    } catch (err: any) {
-      console.error('Koneksi backend gagal saat memuat prodi:', err);
-      if (err.message?.includes('Token') || err.message?.includes('expired') || err.message?.includes('Unauthorized') || err.message?.includes('Akses ditolak')) {
-        logout();
-        router.push('/login');
-      }
-    }
-  };
-
-  // Fetch Mahasiswa list using API Helper
-  const fetchMahasiswaData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getMahasiswa({
+      const result = await getMahasiswa({
+        search,
+        prodi_id: prodiId,
         page,
         limit,
-        search: searchQuery,
-        prodi_id: selectedProdiId
       });
-      if (res.success) {
-        setMahasiswa(res.data || []);
-        if (res.meta) {
-          setMeta(res.meta);
-        }
-      }
+      setMahasiswa(result.data);
+      setTotalPage(result.meta.totalPage);
     } catch (err: any) {
-      console.error('Error fetching data:', err);
-      setError(err.message || 'Terjadi kesalahan saat menghubungi backend API.');
-      if (err.message?.includes('Token') || err.message?.includes('expired') || err.message?.includes('Unauthorized') || err.message?.includes('Akses ditolak')) {
-        logout();
-        router.push('/login');
-      }
-    } finally {
-      setLoading(false);
+      setError(err.message);
     }
   };
 
-  // Load initial references hanya jika sudah terautentikasi
+  const loadProdi = async () => {
+    const result = await getProdi();
+    setProdi(result.data);
+  };
+
   useEffect(() => {
-    if (getToken()) {
-      fetchProdiData();
-    }
+    loadProdi();
   }, []);
 
-  // Fetch student data on changes to page, searchQuery, selectedProdiId hanya jika sudah terautentikasi
   useEffect(() => {
-    if (getToken()) {
-      fetchMahasiswaData();
-    }
-  }, [page, searchQuery, selectedProdiId]);
+    loadMahasiswa();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
-  // Reset to first page when search keyword is cleared
-  useEffect(() => {
-    if (!searchKeyword) {
-      setSearchQuery('');
-      setPage(1);
-    }
-  }, [searchKeyword]);
+  const handleSearch = () => {
+    setPage(1);
+    loadMahasiswa();
+  };
 
-  // Handle Search Submission
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const openCreateForm = () => {
+    setEditing(null);
+    setFormData({ nim: "", nama: "", prodi_id: "", angkatan: "" });
+    setFotoFile(null);
+    setShowForm(true);
+  };
+
+  const openEditForm = (item: Mahasiswa) => {
+    setEditing(item);
+    setFormData({
+      nim: item.nim,
+      nama: item.nama,
+      prodi_id: String(item.prodi_id),
+      angkatan: String(item.angkatan),
+    });
+    setFotoFile(null);
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchQuery(searchKeyword);
-    setPage(1);
-  };
+    setError("");
 
-  // Handle Prodi Filter Change
-  const handleProdiFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedProdiId(e.target.value);
-    setPage(1);
-  };
-
-  // Handle Edit Action
-  const handleEditClick = (item: Mahasiswa) => {
-    setEditingMahasiswa(item);
-    setIsFormOpen(true);
-  };
-
-  // Handle Add Action
-  const handleAddClick = () => {
-    setEditingMahasiswa(null);
-    setIsFormOpen(true);
-  };
-
-  // Handle Delete Action
-  const handleDeleteClick = async (item: Mahasiswa) => {
-    const id = item.id;
-    if (!id) return;
-    if (!confirm(`Apakah Anda yakin ingin menghapus data mahasiswa "${item.nama}" (NIM: ${item.nim})?`)) {
-      return;
-    }
+    const data = new FormData();
+    data.append("nim", formData.nim);
+    data.append("nama", formData.nama);
+    data.append("prodi_id", formData.prodi_id);
+    data.append("angkatan", formData.angkatan);
+    if (fotoFile) data.append("foto", fotoFile);
 
     try {
-      const res = await deleteMahasiswa(id);
-      if (res.success) {
-        fetchMahasiswaData();
+      if (editing) {
+        await updateMahasiswa(editing.id, data);
+      } else {
+        await createMahasiswa(data);
       }
+      setShowForm(false);
+      loadMahasiswa();
     } catch (err: any) {
-      console.error('Error deleting student:', err);
-      alert(`Gagal Menghapus: ${err.message}`);
+      setError(err.message);
     }
   };
 
-  // Helper to build full image URL from backend static path with placeholder fallback
-  const getFullImageUrl = (fotoPath: string | null) => {
-    if (!fotoPath) return '/avatar-placeholder.png';
-    if (fotoPath.startsWith('http://') || fotoPath.startsWith('https://') || fotoPath.startsWith('data:')) {
-      return fotoPath;
-    }
-    const cleanPath = fotoPath.replace(/\\/g, '/');
-    return `${BACKEND_URL}/${cleanPath.replace(/^\/?/, '')}`;
-  };
-
-  const handleLogoutClick = () => {
-    if (typeof window !== 'undefined') {
-      const isConfirmed = window.confirm('Apakah Anda yakin ingin logout?');
-      if (isConfirmed) {
-        logout();
-        router.push('/login');
-      }
+  const handleDelete = async (id: number) => {
+    if (!confirm("Yakin ingin menghapus data ini?")) return;
+    try {
+      await deleteMahasiswa(id);
+      loadMahasiswa();
+    } catch (err: any) {
+      setError(err.message);
     }
   };
-
-  // Jangan render konten jika belum selesai check auth di client-side
-  if (!isClient || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-10 font-sans text-slate-800 dark:text-slate-200">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">
-              Kelola Data Mahasiswa
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Sistem CRUD Next.js & Express.js untuk data Mahasiswa.
-            </p>
-            {user && (
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1.5">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                Login sebagai: <strong className="text-slate-600 dark:text-slate-300">{user.name}</strong> ({user.email}) - <span className="uppercase text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-blue-600 dark:text-blue-400 font-bold">{user.role}</span>
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {user && user.role === 'admin' && (
-              <button
-                onClick={() => router.push('/users')}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold rounded-xl shadow-sm transition-all duration-200 focus:outline-none cursor-pointer"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                Kelola User
-              </button>
-            )}
-            <button
-              onClick={handleAddClick}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none cursor-pointer"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-              </svg>
-              Tambah Mahasiswa
-            </button>
-            <button
-              onClick={handleLogoutClick}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold rounded-xl border border-rose-100 dark:border-rose-900/30 transition-all duration-200 focus:outline-none cursor-pointer"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013-3v1" />
-              </svg>
-              Logout
-            </button>
-          </div>
+    <main style={{ maxWidth: 1000, margin: "0 auto", padding: "2rem 1rem" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 700 }}>Data Mahasiswa</h1>
+          <p style={{ fontSize: "0.85rem", color: "#64748b" }}>
+            Login sebagai: {user?.name} ({role})
+          </p>
         </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {role === "admin" && (
+            <a href="/users" style={linkButtonStyle}>
+              Kelola User
+            </a>
+          )}
+          <button onClick={logout} style={secondaryButtonStyle}>
+            Logout
+          </button>
+        </div>
+      </div>
 
-        {/* Filter & Search Bar */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
-          {/* Search Form */}
-          <form onSubmit={handleSearchSubmit} className="w-full md:max-w-md flex gap-2">
-            <div className="relative flex-1">
-              <span className="absolute inset-y-0 left-3 flex items-center pl-1 text-slate-400">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </span>
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Cari NIM atau Nama..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:outline-none text-sm transition-all"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl text-sm transition-all focus:outline-none"
-            >
-              Cari
-            </button>
-          </form>
+      {error && <p style={{ color: "#dc2626", marginBottom: 12 }}>{error}</p>}
 
-          {/* Program Studi Filter */}
-          <div className="w-full md:w-72 flex items-center gap-2">
-            <label htmlFor="filter-prodi" className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-              Prodi:
-            </label>
+      {/* [Pertemuan 12 - Bagian 11] Search, filter, pagination */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari NIM atau nama"
+          style={{ ...inputStyle, maxWidth: 220 }}
+        />
+
+        <select
+          value={prodiId}
+          onChange={(e) => setProdiId(e.target.value)}
+          style={{ ...inputStyle, maxWidth: 200 }}
+        >
+          <option value="">Semua Prodi</option>
+          {prodi.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.nama_prodi}
+            </option>
+          ))}
+        </select>
+
+        <button onClick={handleSearch} style={buttonStyle}>
+          Cari
+        </button>
+
+        {/* [Pertemuan 14 - Bagian 6] tombol Tambah hanya untuk admin/operator */}
+        {canCreate && (
+          <button onClick={openCreateForm} style={{ ...buttonStyle, marginLeft: "auto" }}>
+            + Tambah Mahasiswa
+          </button>
+        )}
+      </div>
+
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+        <thead>
+          <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
+            <th style={thStyle}>Foto</th>
+            <th style={thStyle}>NIM</th>
+            <th style={thStyle}>Nama</th>
+            <th style={thStyle}>Prodi</th>
+            <th style={thStyle}>Angkatan</th>
+            {(canEdit || canDelete) && <th style={thStyle}>Aksi</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {mahasiswa.map((item) => (
+            <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+              <td style={tdStyle}>
+                {/* [Pertemuan 12 - Bagian 10] Menampilkan Foto di DataTable */}
+                <img
+                  src={
+                    item.foto
+                      ? `${BACKEND_URL}/uploads/mahasiswa/${item.foto}`
+                      : "/avatar-placeholder.png"
+                  }
+                  alt={item.nama}
+                  width={40}
+                  height={40}
+                  style={{ borderRadius: "50%", objectFit: "cover" }}
+                />
+              </td>
+              <td style={tdStyle}>{item.nim}</td>
+              <td style={tdStyle}>{item.nama}</td>
+              <td style={tdStyle}>{item.nama_prodi}</td>
+              <td style={tdStyle}>{item.angkatan}</td>
+              {(canEdit || canDelete) && (
+                <td style={tdStyle}>
+                  {canEdit && (
+                    <button onClick={() => openEditForm(item)} style={smallButtonStyle}>
+                      Edit
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      style={{ ...smallButtonStyle, background: "#dc2626" }}
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </td>
+              )}
+            </tr>
+          ))}
+          {mahasiswa.length === 0 && (
+            <tr>
+              <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#64748b" }}>
+                Tidak ada data
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {/* [Pertemuan 12 - Bagian 11] Pagination */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16 }}>
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)} style={smallButtonStyle}>
+          Previous
+        </button>
+        <span style={{ fontSize: "0.85rem" }}>
+          Halaman {page} dari {totalPage}
+        </span>
+        <button
+          disabled={page >= totalPage}
+          onClick={() => setPage(page + 1)}
+          style={smallButtonStyle}
+        >
+          Next
+        </button>
+      </div>
+
+      {/* Form tambah/edit mahasiswa - hanya dirender kalau showForm true */}
+      {showForm && (
+        <div style={modalOverlayStyle}>
+          <form onSubmit={handleSubmit} style={modalStyle}>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 12 }}>
+              {editing ? "Edit Mahasiswa" : "Tambah Mahasiswa"}
+            </h2>
+
+            <label style={labelStyle}>NIM</label>
+            <input
+              required
+              value={formData.nim}
+              onChange={(e) => setFormData({ ...formData, nim: e.target.value })}
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Nama</label>
+            <input
+              required
+              value={formData.nama}
+              onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Prodi</label>
             <select
-              id="filter-prodi"
-              value={selectedProdiId}
-              onChange={handleProdiFilterChange}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 text-sm focus:border-blue-500 focus:outline-none transition-all"
+              required
+              value={formData.prodi_id}
+              onChange={(e) => setFormData({ ...formData, prodi_id: e.target.value })}
+              style={inputStyle}
             >
-              <option value="">Semua Program Studi</option>
-              {prodiList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nama_prodi}
+              <option value="">Pilih Prodi</option>
+              {prodi.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nama_prodi}
                 </option>
               ))}
             </select>
-          </div>
-        </div>
 
-        {/* Content Section (Table, Loading, Error, Empty states) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
-          {error ? (
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-rose-50 text-rose-500 dark:bg-rose-950/20 dark:text-rose-400 mb-4">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Gagal Memuat Data</h3>
-              <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto text-sm">{error}</p>
+            <label style={labelStyle}>Angkatan</label>
+            <input
+              required
+              type="number"
+              value={formData.angkatan}
+              onChange={(e) => setFormData({ ...formData, angkatan: e.target.value })}
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Foto (JPG/PNG/WEBP, maks 2MB)</label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setFotoFile(e.target.files?.[0] || null)}
+              style={{ marginBottom: 16 }}
+            />
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="submit" style={buttonStyle}>
+                Simpan
+              </button>
               <button
-                onClick={fetchMahasiswaData}
-                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all"
+                type="button"
+                onClick={() => setShowForm(false)}
+                style={secondaryButtonStyle}
               >
-                Coba Lagi
+                Batal
               </button>
             </div>
-          ) : loading ? (
-            /* Table Loading Skeletons */
-            <div className="p-6 space-y-4">
-              <div className="animate-pulse flex space-x-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
-              </div>
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="animate-pulse flex items-center space-x-4 py-3">
-                  <div className="rounded-full bg-slate-200 dark:bg-slate-800 h-10 w-10"></div>
-                  <div className="flex-1 space-y-2 py-1">
-                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4"></div>
-                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2"></div>
-                  </div>
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded w-20"></div>
-                </div>
-              ))}
-            </div>
-          ) : mahasiswa.length === 0 ? (
-            /* Empty Data State */
-            <div className="p-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 mb-4">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Tidak Ada Data Mahasiswa</h3>
-              <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
-                {searchQuery || selectedProdiId
-                  ? 'Tidak ada data yang cocok dengan kriteria pencarian/filter Anda.'
-                  : 'Silakan tambah data mahasiswa baru menggunakan tombol di atas.'}
-              </p>
-              {(searchQuery || selectedProdiId) && (
-                <button
-                  onClick={() => {
-                    setSearchKeyword('');
-                    setSearchQuery('');
-                    setSelectedProdiId('');
-                    setPage(1);
-                  }}
-                  className="mt-4 px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
-                >
-                  Reset Filter
-                </button>
-              )}
-            </div>
-          ) : (
-            /* Table Data */
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-900/50">
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Foto</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">NIM</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nama Lengkap</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Program Studi</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Angkatan</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {mahasiswa.map((item) => (
-                    <tr
-                      key={item.nim}
-                      className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-150"
-                    >
-                      {/* Foto Column */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="relative w-10 h-10 overflow-hidden rounded-full border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm">
-                          <img
-                            src={getFullImageUrl(item.foto)}
-                            alt={item.nama}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = '/avatar-placeholder.png';
-                            }}
-                          />
-                        </div>
-                      </td>
-
-                      {/* NIM Column */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold font-mono text-slate-600 dark:text-slate-300">
-                        {item.nim}
-                      </td>
-
-                      {/* Nama Column */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {item.nama}
-                      </td>
-
-                      {/* Prodi Column */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-550/10 text-blue-700 dark:bg-blue-900/35 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
-                          {item.nama_prodi || 'Tidak Diketahui'}
-                        </span>
-                      </td>
-
-                      {/* Angkatan Column */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-350">
-                        {item.angkatan || '-'}
-                      </td>
-
-                      {/* Action Buttons Column */}
-                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                        <div className="flex items-center justify-center gap-3">
-                          <button
-                            onClick={() => handleEditClick(item)}
-                            className="inline-flex items-center justify-center p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(item)}
-                            className="inline-flex items-center justify-center p-1.5 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="Hapus"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination Navigation */}
-          {!loading && !error && mahasiswa.length > 0 && (
-            <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Halaman <span className="font-semibold text-slate-800 dark:text-slate-200">{page}</span> dari <span className="font-semibold text-slate-800 dark:text-slate-200">{meta.totalPage || 1}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={page <= 1}
-                  className="px-3.5 py-1.5 border border-slate-350 dark:border-slate-700 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 shadow-sm"
-                >
-                  Sebelumnya
-                </button>
-                <button
-                  onClick={() => setPage((prev) => Math.min(prev + 1, meta.totalPage))}
-                  disabled={page >= meta.totalPage}
-                  className="px-3.5 py-1.5 border border-slate-350 dark:border-slate-700 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 shadow-sm"
-                >
-                  Selanjutnya
-                </button>
-              </div>
-            </div>
-          )}
+          </form>
         </div>
-      </div>
-
-      {/* Reusable Form Modal */}
-      <MahasiswaForm
-        isOpen={isFormOpen}
-        onClose={() => {
-          setIsFormOpen(false);
-          setEditingMahasiswa(null);
-        }}
-        onSuccess={fetchMahasiswaData}
-        editingMahasiswa={editingMahasiswa}
-      />
+      )}
     </main>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "0.55rem 0.7rem",
+  marginTop: 4,
+  marginBottom: 12,
+  borderRadius: 8,
+  border: "1px solid #cbd5e1",
+  fontSize: "0.85rem",
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: "0.78rem",
+  fontWeight: 600,
+};
+
+const buttonStyle: React.CSSProperties = {
+  padding: "0.55rem 1rem",
+  borderRadius: 8,
+  border: "none",
+  background: "#2563eb",
+  color: "#fff",
+  fontWeight: 600,
+  cursor: "pointer",
+  fontSize: "0.85rem",
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  background: "#e2e8f0",
+  color: "#1e293b",
+};
+
+const linkButtonStyle: React.CSSProperties = {
+  ...secondaryButtonStyle,
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+};
+
+const smallButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  padding: "0.35rem 0.6rem",
+  fontSize: "0.78rem",
+  marginRight: 6,
+};
+
+const thStyle: React.CSSProperties = {
+  padding: "0.6rem",
+  fontWeight: 600,
+  fontSize: "0.8rem",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "0.6rem",
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.4)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "1rem",
+};
+
+const modalStyle: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 12,
+  padding: "1.5rem",
+  width: "100%",
+  maxWidth: 420,
+};

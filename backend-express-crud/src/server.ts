@@ -1,14 +1,10 @@
-import app from './app';
-import { initDb } from './config/database';
+import dotenv from "dotenv";
+dotenv.config();
 
-const PORT = process.env.PORT || 5000;
+import app from "./app";
 
-// Initialize database (run migrations/seeding) before launching the server
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
-}).catch((err) => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });

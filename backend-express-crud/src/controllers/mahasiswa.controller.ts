@@ -1,280 +1,153 @@
-import { Request, Response } from 'express';
-import pool from '../config/database';
-import fs from 'fs';
-import path from 'path';
+// [Pertemuan 12 - Bagian 6 & 7] — versi Prisma
+// Sebelumnya: JOIN manual pakai SQL ("JOIN prodi p ON m.prodi_id = p.id")
+// Sekarang:   relasi otomatis lewat `include: { prodi: true }`
+import { Request, Response } from "express";
+import prisma from "../config/prisma";
+import { Prisma } from "@prisma/client";
 
-// Helper to delete uploaded files on errors or replacements
-const deleteFile = (filePath: string) => {
+// [Pertemuan 12 - Bagian 6: Query Mahasiswa dengan Relasi, Search, Filter, Pagination]
+export const getAllMahasiswa = async (req: Request, res: Response) => {
   try {
-    const fullPath = path.resolve(filePath);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-    }
-  } catch (err) {
-    console.error('Error deleting file:', err);
-  }
-};
+    const search = String(req.query.search || "");
+    const prodiId = req.query.prodi_id ? Number(req.query.prodi_id) : null;
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
 
-// READ ALL (PAGINATED, FILTERABLE, SEARCHABLE)
-export const getMahasiswa = async (req: Request, res: Response) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const offset = (page - 1) * limit;
-    const search = (req.query.search as string) || '';
-    const prodiId = req.query.prodi_id as string;
+    // [Prisma] Pengganti string WHERE dinamis: object `where` yang disusun
+    // bertahap. Prisma otomatis melakukan parameterized query di balik
+    // layar, jadi aman dari SQL injection tanpa perlu placeholder manual.
+    const where: Prisma.MahasiswaWhereInput = {};
 
-    let query = `
-      SELECT m.*, p.nama_prodi 
-      FROM mahasiswa m 
-      JOIN prodi p ON m.prodi_id = p.id
-      WHERE 1=1
-    `;
-    let countQuery = `
-      SELECT COUNT(*) as total 
-      FROM mahasiswa m 
-      JOIN prodi p ON m.prodi_id = p.id
-      WHERE 1=1
-    `;
-    const queryParams: any[] = [];
-    const countParams: any[] = [];
-
-    // Search filter (NIM or Name)
-    if (search.trim()) {
-      const searchPattern = `%${search.trim()}%`;
-      query += ` AND (m.nama LIKE ? OR m.nim LIKE ?)`;
-      countQuery += ` AND (m.nama LIKE ? OR m.nim LIKE ?)`;
-      queryParams.push(searchPattern, searchPattern);
-      countParams.push(searchPattern, searchPattern);
+    if (search) {
+      where.OR = [
+        { nim: { contains: search } },
+        { nama: { contains: search } },
+      ];
     }
 
-    // Prodi filter
     if (prodiId) {
-      query += ` AND m.prodi_id = ?`;
-      countQuery += ` AND m.prodi_id = ?`;
-      queryParams.push(parseInt(prodiId));
-      countParams.push(parseInt(prodiId));
+      where.prodiId = prodiId;
     }
 
-    // Ordering and Pagination
-    query += ` ORDER BY m.id DESC LIMIT ? OFFSET ?`;
-    queryParams.push(limit, offset);
+    const [total, rows] = await Promise.all([
+      prisma.mahasiswa.count({ where }),
+      prisma.mahasiswa.findMany({
+        where,
+        include: { prodi: { select: { id: true, namaProdi: true } } },
+        orderBy: { id: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
-    const [rows]: any = await pool.query(query, queryParams);
-    const [countRows]: any = await pool.query(countQuery, countParams);
-    const totalItems = countRows[0].total;
-    const totalPages = Math.ceil(totalItems / limit);
+    // Map balik ke bentuk JSON yang sama seperti versi mysql2 sebelumnya
+    // (field flat: prodi_id, nama_prodi), supaya frontend tidak perlu diubah.
+    const data = rows.map((m) => ({
+      id: m.id,
+      nim: m.nim,
+      nama: m.nama,
+      angkatan: m.angkatan,
+      foto: m.foto,
+      prodi_id: m.prodi.id,
+      nama_prodi: m.prodi.namaProdi,
+    }));
 
-    return res.status(200).json({
-      success: true,
-      message: 'Data mahasiswa berhasil diambil',
-      data: rows,
+    res.json({
+      message: "Data mahasiswa berhasil diambil",
       meta: {
         page,
         limit,
-        total: totalItems,
-        totalPage: totalPages
-      }
+        total,
+        totalPage: Math.ceil(total / limit),
+      },
+      data,
     });
-  } catch (error: any) {
-    console.error('Error fetching mahasiswa:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Gagal mengambil data mahasiswa'
-    });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// CREATE
+// [Pertemuan 12 - Bagian 7: Create dan Update Mahasiswa dengan Foto]
 export const createMahasiswa = async (req: Request, res: Response) => {
-  const file = req.file;
   try {
     const { nim, nama, prodi_id, angkatan } = req.body;
+    const foto = req.file ? req.file.filename : null;
 
     if (!nim || !nama || !prodi_id || !angkatan) {
-      if (file) deleteFile(file.path);
       return res.status(400).json({
-        success: false,
-        message: 'NIM, nama, prodi_id, dan angkatan wajib diisi'
+        message: "NIM, nama, prodi, dan angkatan wajib diisi",
       });
     }
 
-    // Check NIM uniqueness
-    const [existingNimRows]: any = await pool.query('SELECT id FROM mahasiswa WHERE nim = ?', [nim.trim()]);
-    if (existingNimRows.length > 0) {
-      if (file) deleteFile(file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'NIM sudah terdaftar'
-      });
+    const existing = await prisma.mahasiswa.findUnique({ where: { nim } });
+    if (existing) {
+      return res.status(400).json({ message: "NIM sudah digunakan" });
     }
 
-    // Verify Prodi existence
-    const [prodiRows]: any = await pool.query('SELECT id FROM prodi WHERE id = ?', [parseInt(prodi_id)]);
-    if (prodiRows.length === 0) {
-      if (file) deleteFile(file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'Program Studi tidak ditemukan'
-      });
-    }
-
-    const fotoPath = file ? `uploads/mahasiswa/${file.filename}` : null;
-
-    const [result]: any = await pool.query(
-      'INSERT INTO mahasiswa (nim, nama, prodi_id, angkatan, foto) VALUES (?, ?, ?, ?, ?)',
-      [nim.trim(), nama.trim(), parseInt(prodi_id), angkatan.trim(), fotoPath]
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: 'Mahasiswa berhasil ditambahkan',
+    const created = await prisma.mahasiswa.create({
       data: {
-        id: result.insertId,
-        nim: nim.trim(),
-        nama: nama.trim(),
-        prodi_id: parseInt(prodi_id),
-        angkatan: angkatan.trim(),
-        foto: fotoPath
-      }
+        nim,
+        nama,
+        prodiId: Number(prodi_id),
+        angkatan: Number(angkatan),
+        foto,
+      },
     });
-  } catch (error: any) {
-    console.error('Error creating mahasiswa:', error);
-    if (file) deleteFile(file.path);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Gagal menambahkan mahasiswa'
+
+    res.status(201).json({
+      message: "Mahasiswa berhasil ditambahkan",
+      data: created,
     });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// UPDATE
 export const updateMahasiswa = async (req: Request, res: Response) => {
-  const file = req.file;
   try {
-    const idOrNim = req.params.id;
+    const { id } = req.params;
     const { nim, nama, prodi_id, angkatan } = req.body;
 
-    // Fetch existing record
-    const [existingRows]: any = await pool.query(
-      'SELECT * FROM mahasiswa WHERE id = ? OR nim = ?',
-      [idOrNim, idOrNim]
-    );
+    const data: Prisma.MahasiswaUpdateInput = {
+      nim,
+      nama,
+      prodi: { connect: { id: Number(prodi_id) } },
+      angkatan: Number(angkatan),
+    };
 
-    if (existingRows.length === 0) {
-      if (file) deleteFile(file.path);
-      return res.status(404).json({
-        success: false,
-        message: 'Mahasiswa tidak ditemukan'
-      });
+    // Foto bersifat opsional saat update — hanya diganti jika ada file baru
+    if (req.file) {
+      data.foto = req.file.filename;
     }
 
-    const currentM = existingRows[0];
-    const mId = currentM.id;
+    const updated = await prisma.mahasiswa
+      .update({ where: { id: Number(id) }, data })
+      .catch(() => null);
 
-    if (!nim || !nama || !prodi_id || !angkatan) {
-      if (file) deleteFile(file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'NIM, nama, prodi_id, dan angkatan wajib diisi'
-      });
+    if (!updated) {
+      return res.status(404).json({ message: "Mahasiswa tidak ditemukan" });
     }
 
-    // Check NIM collision
-    const [nimCollisionRows]: any = await pool.query(
-      'SELECT id FROM mahasiswa WHERE nim = ? AND id != ?',
-      [nim.trim(), mId]
-    );
-    if (nimCollisionRows.length > 0) {
-      if (file) deleteFile(file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'NIM sudah digunakan oleh mahasiswa lain'
-      });
-    }
-
-    // Verify Prodi existence
-    const [prodiRows]: any = await pool.query('SELECT id FROM prodi WHERE id = ?', [parseInt(prodi_id)]);
-    if (prodiRows.length === 0) {
-      if (file) deleteFile(file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'Program Studi tidak ditemukan'
-      });
-    }
-
-    let fotoPath = currentM.foto;
-    if (file) {
-      // Delete old photo if it exists
-      if (currentM.foto) {
-        deleteFile(currentM.foto);
-      }
-      fotoPath = `uploads/mahasiswa/${file.filename}`;
-    }
-
-    await pool.query(
-      'UPDATE mahasiswa SET nim = ?, nama = ?, prodi_id = ?, angkatan = ?, foto = ? WHERE id = ?',
-      [nim.trim(), nama.trim(), parseInt(prodi_id), angkatan.trim(), fotoPath, mId]
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: 'Mahasiswa berhasil diperbarui',
-      data: {
-        id: mId,
-        nim: nim.trim(),
-        nama: nama.trim(),
-        prodi_id: parseInt(prodi_id),
-        angkatan: angkatan.trim(),
-        foto: fotoPath
-      }
-    });
-  } catch (error: any) {
-    console.error('Error updating mahasiswa:', error);
-    if (file) deleteFile(file.path);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Gagal memperbarui data mahasiswa'
-    });
+    res.json({ message: "Mahasiswa berhasil diperbarui" });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// DELETE
 export const deleteMahasiswa = async (req: Request, res: Response) => {
   try {
-    const idOrNim = req.params.id;
+    const { id } = req.params;
 
-    // Fetch existing record
-    const [existingRows]: any = await pool.query(
-      'SELECT * FROM mahasiswa WHERE id = ? OR nim = ?',
-      [idOrNim, idOrNim]
-    );
+    const deleted = await prisma.mahasiswa
+      .delete({ where: { id: Number(id) } })
+      .catch(() => null);
 
-    if (existingRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Mahasiswa tidak ditemukan'
-      });
+    if (!deleted) {
+      return res.status(404).json({ message: "Mahasiswa tidak ditemukan" });
     }
 
-    const currentM = existingRows[0];
-
-    // Delete photo file if it exists
-    if (currentM.foto) {
-      deleteFile(currentM.foto);
-    }
-
-    await pool.query('DELETE FROM mahasiswa WHERE id = ?', [currentM.id]);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Mahasiswa berhasil dihapus'
-    });
-  } catch (error: any) {
-    console.error('Error deleting mahasiswa:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Gagal menghapus data mahasiswa'
-    });
+    res.json({ message: "Mahasiswa berhasil dihapus" });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };

@@ -1,265 +1,198 @@
-import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
-import pool from '../config/database';
+// [Pertemuan 15] — versi Prisma
+// Semua endpoint di sini dibatasi khusus admin lewat middleware
+// authMiddleware + allowRoles("admin") di routes/user.route.ts
+import { Request, Response } from "express";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import prisma from "../config/prisma";
+import { mailer } from "../config/mail";
 
-// Helper to generate a random alphanumeric temporary password
-const generateTemporaryPassword = (length = 10): string => {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    const randomIndex = Math.floor(Math.random() * charset.length);
-    password += charset[randomIndex];
-  }
-  return password;
-};
-
-// 1. GET ALL USERS (Ordered by id DESC)
-export const getUsers = async (req: Request, res: Response) => {
+// [Pertemuan 15 - Bagian 2: Read Daftar User]
+// Prinsip keamanan: JANGAN pernah `select` kolom password ke frontend.
+export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const [rows]: any = await pool.query(
-      'SELECT id, name, email, role, created_at FROM users ORDER BY id DESC'
-    );
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+      orderBy: { id: "desc" },
+    });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Daftar user berhasil diambil',
-      data: rows
-    });
-  } catch (error: any) {
-    console.error('Error fetching users:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Terjadi kesalahan saat mengambil daftar user'
-    });
+    // Map created_at (snake_case) supaya konsisten dengan kontrak API lama
+    const data = users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      created_at: u.createdAt,
+    }));
+
+    res.json({ message: "Data user berhasil diambil", data });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// 2. CREATE USER
+// [Pertemuan 15 - Bagian 3: Create User oleh Admin]
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // Validasi input wajib
     if (!name || !email || !password || !role) {
       return res.status(400).json({
-        success: false,
-        message: 'Semua field (name, email, password, role) wajib diisi'
+        message: "Nama, email, password, dan role wajib diisi",
       });
     }
 
-    // Validasi format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Format email tidak valid'
-      });
+    const allowedRoles = ["admin", "operator", "viewer"];
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ message: "Role tidak valid" });
     }
 
-    // Validasi role yang diizinkan
-    const validRoles = ['admin', 'operator', 'viewer'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Role harus berupa admin, operator, atau viewer'
-      });
-    }
-
-    // Validasi email unik
-    const [existingUser]: any = await pool.query(
-      'SELECT id FROM users WHERE email = ?',
-      [email]
-    );
-
-    if (existingUser.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email sudah terdaftar, silakan gunakan email lain'
-      });
-    }
-
-    // Hash password menggunakan bcrypt
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Simpan user baru ke database
-    const [result]: any = await pool.query(
-      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPassword, role]
-    );
+    await prisma.user.create({
+      data: { name, email, password: hashedPassword, role },
+    });
 
-    return res.status(201).json({
-      success: true,
-      message: 'User berhasil dibuat',
-      data: {
-        id: result.insertId,
-        name,
-        email,
-        role
-      }
-    });
+    res.status(201).json({ message: "User berhasil ditambahkan" });
   } catch (error: any) {
-    console.error('Error creating user:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Terjadi kesalahan saat membuat user'
-    });
+    // P2002 = unique constraint (email) violation
+    if (error.code === "P2002") {
+      return res.status(400).json({ message: "Email sudah digunakan" });
+    }
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// 3. UPDATE USER (name, email, role)
+// [Pertemuan 15 - Bagian 4: Update dan Delete User]
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, email, role } = req.body;
 
-    // Validasi input wajib
-    if (!name || !email || !role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Semua field (name, email, role) wajib diisi'
-      });
+    const updated = await prisma.user
+      .update({
+        where: { id: Number(id) },
+        data: { name, email, role },
+      })
+      .catch(() => null);
+
+    if (!updated) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
 
-    // Validasi role yang diizinkan
-    const validRoles = ['admin', 'operator', 'viewer'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Role harus berupa admin, operator, atau viewer'
-      });
-    }
-
-    // Validasi format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Format email tidak valid'
-      });
-    }
-
-    // Cek apakah user ada di database
-    const [userExists]: any = await pool.query(
-      'SELECT id FROM users WHERE id = ?',
-      [id]
-    );
-
-    if (userExists.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'User tidak ditemukan'
-      });
-    }
-
-    // Validasi email unik (tidak boleh kembar dengan user lain)
-    const [emailInUse]: any = await pool.query(
-      'SELECT id FROM users WHERE email = ? AND id != ?',
-      [email, id]
-    );
-
-    if (emailInUse.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email sudah digunakan oleh user lain'
-      });
-    }
-
-    // Update database (hanya name, email, role)
-    await pool.query(
-      'UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?',
-      [name, email, role, id]
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: 'User berhasil diperbarui',
-      data: {
-        id: parseInt(id),
-        name,
-        email,
-        role
-      }
-    });
-  } catch (error: any) {
-    console.error('Error updating user:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Terjadi kesalahan saat memperbarui user'
-    });
+    res.json({ message: "User berhasil diperbarui" });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// 4. DELETE USER
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Cek apakah user ada di database
-    const [userExists]: any = await pool.query(
-      'SELECT id FROM users WHERE id = ?',
-      [id]
-    );
+    const deleted = await prisma.user
+      .delete({ where: { id: Number(id) } })
+      .catch(() => null);
 
-    if (userExists.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'User tidak ditemukan'
-      });
+    if (!deleted) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
 
-    // Hapus user dari database
-    await pool.query('DELETE FROM users WHERE id = ?', [id]);
-
-    return res.status(200).json({
-      success: true,
-      message: 'User berhasil dihapus'
-    });
-  } catch (error: any) {
-    console.error('Error deleting user:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Terjadi kesalahan saat menghapus user'
-    });
+    res.json({ message: "User berhasil dihapus" });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
 
-// 5. RESET PASSWORD
-export const resetPassword = async (req: Request, res: Response) => {
+// [Pertemuan 15 - Bagian 5: Reset Password oleh Admin]
+// Catatan keamanan (dari materi): menampilkan temporaryPassword langsung di
+// response HANYA cocok untuk latihan/sistem internal terbatas. Untuk skenario
+// lebih baik, kirim link reset password lewat email (lihat requestPasswordReset
+// di bawah) dan jangan tampilkan password baru di layar admin.
+function generateTemporaryPassword() {
+  return Math.random().toString(36).slice(-10);
+}
+
+export const resetPasswordByAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // Cek apakah user ada di database
-    const [userExists]: any = await pool.query(
-      'SELECT id FROM users WHERE id = ?',
-      [id]
-    );
-
-    if (userExists.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'User tidak ditemukan'
-      });
-    }
-
-    // Generate password sementara dan hash
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
-    // Update password di database
-    await pool.query(
-      'UPDATE users SET password = ? WHERE id = ?',
-      [hashedPassword, id]
-    );
+    const updated = await prisma.user
+      .update({
+        where: { id: Number(id) },
+        data: { password: hashedPassword },
+      })
+      .catch(() => null);
 
-    return res.status(200).json({
-      message: 'Password berhasil direset',
-      temporaryPassword
+    if (!updated) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    res.json({
+      message: "Password berhasil direset",
+      temporaryPassword,
+      note: "Tampilkan hanya sekali, lalu minta user mengganti password.",
     });
-  } catch (error: any) {
-    console.error('Error resetting password:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Terjadi kesalahan saat mereset password'
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
+  }
+};
+
+// [Pertemuan 15 - Bagian 7: Opsi Reset Password via Email] (opsional/bonus)
+// Alur: user minta reset -> backend generate token acak -> simpan HASH token
+// (bukan token mentah) ke tabel password_reset_tokens -> kirim token mentah
+// lewat email sebagai link.
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email wajib diisi" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // Selalu balas sukses walau email tidak ditemukan, supaya endpoint ini
+    // tidak bisa dipakai untuk menebak email mana yang terdaftar.
+    if (!user) {
+      return res.json({
+        message: "Jika email terdaftar, link reset password telah dikirim",
+      });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 menit
+
+    await prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt },
     });
+
+    await mailer.sendMail({
+      from: `Admin Kampus <${process.env.MAIL_USER}>`,
+      to: user.email,
+      subject: "Reset Password",
+      html: `
+        <p>Anda meminta reset password.</p>
+        <p>Klik link berikut untuk mengganti password:</p>
+        <a href="${process.env.APP_URL}/reset-password?token=${rawToken}">
+          Reset Password
+        </a>
+        <p>Link berlaku selama 30 menit.</p>
+      `,
+    });
+
+    res.json({
+      message: "Jika email terdaftar, link reset password telah dikirim",
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };

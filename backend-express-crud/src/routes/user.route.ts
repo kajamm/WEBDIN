@@ -1,18 +1,24 @@
-import { Router } from 'express';
-import { getUsers, createUser, updateUser, deleteUser, resetPassword } from '../controllers/user.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
-import { roleMiddleware } from '../middlewares/role.middleware';
+// [Pertemuan 15 - Bagian 6: Route User Khusus Admin]
+import { Router } from "express";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { allowRoles } from "../middlewares/role.middleware";
+import {
+  getAllUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  resetPasswordByAdmin,
+} from "../controllers/user.controller";
 
 const router = Router();
 
-// Melindungi seluruh endpoint user di bawah ini agar hanya dapat diakses oleh role admin
-router.use(authMiddleware as any);
-router.use(roleMiddleware(['admin']) as any);
+router.use(authMiddleware);
+router.use(allowRoles("admin"));
 
-router.get('/', getUsers);
-router.post('/', createUser);
-router.put('/:id', updateUser);
-router.delete('/:id', deleteUser);
-router.patch('/:id/reset-password', resetPassword);
+router.get("/", getAllUsers);
+router.post("/", createUser);
+router.put("/:id", updateUser);
+router.delete("/:id", deleteUser);
+router.patch("/:id/reset-password", resetPasswordByAdmin);
 
 export default router;
