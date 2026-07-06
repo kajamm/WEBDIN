@@ -24,24 +24,12 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<UserAccount | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "viewer",
-  });
+  const [formData, setFormData] = useState({ name: "", email: "", password: "", role: "viewer" });
   const [tempPassword, setTempPassword] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!getToken()) {
-      router.push("/login");
-      return;
-    }
-    // Proteksi UX: kalau bukan admin, jangan tampilkan halaman ini
-    if (currentUser?.role !== "admin") {
-      router.push("/mahasiswa");
-      return;
-    }
+    if (!getToken()) { router.push("/login"); return; }
+    if (currentUser?.role !== "admin") { router.push("/mahasiswa"); return; }
     loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -72,11 +60,7 @@ export default function UsersPage() {
     setError("");
     try {
       if (editing) {
-        await updateUserAccount(editing.id, {
-          name: formData.name,
-          email: formData.email,
-          role: formData.role,
-        });
+        await updateUserAccount(editing.id, { name: formData.name, email: formData.email, role: formData.role });
       } else {
         await createUserAccount(formData);
       }
@@ -97,7 +81,6 @@ export default function UsersPage() {
     }
   };
 
-  // [Pertemuan 15 - Bagian 5 & 9] Reset password -> tampilkan temporary password sekali
   const handleResetPassword = async (id: number) => {
     try {
       const result = await resetUserPassword(id);
@@ -108,222 +91,106 @@ export default function UsersPage() {
   };
 
   return (
-    <main style={{ maxWidth: 900, margin: "0 auto", padding: "2rem 1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 700 }}>Kelola User</h1>
-          <p style={{ fontSize: "0.85rem", color: "#64748b" }}>Khusus role admin</p>
+    <main className="page">
+      <div className="page-content">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">Administrasi</p>
+            <h1 className="heading-lg">Kelola User</h1>
+            <p className="subtitle">Khusus role admin</p>
+          </div>
+          <div className="topbar-actions">
+            <a href="/mahasiswa" className="btn btn-secondary">← Kembali</a>
+            <button onClick={openCreateForm} className="btn btn-primary" style={{ width: "auto" }}>
+              + Tambah User
+            </button>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <a href="/mahasiswa" style={secondaryButtonStyle}>
-            ← Kembali ke Mahasiswa
-          </a>
-          <button onClick={openCreateForm} style={buttonStyle}>
-            + Tambah User
-          </button>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {tempPassword && (
+          <div className="alert alert-note">
+            Password sementara: <strong>{tempPassword}</strong> — catat sekarang, pesan ini tidak akan muncul lagi.{" "}
+            <button onClick={() => setTempPassword(null)} className="btn btn-sm btn-secondary" style={{ marginLeft: 8 }}>
+              Tutup
+            </button>
+          </div>
+        )}
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Dibuat</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.name}</td>
+                  <td>{item.email}</td>
+                  <td><span className={`badge badge-${item.role}`}>{item.role}</span></td>
+                  <td>{new Date(item.created_at).toLocaleDateString("id-ID")}</td>
+                  <td>
+                    <button onClick={() => openEditForm(item)} className="btn btn-secondary btn-sm" style={{ marginRight: 6 }}>Edit</button>
+                    <button onClick={() => handleResetPassword(item.id)} className="btn btn-secondary btn-sm" style={{ marginRight: 6 }}>Reset Password</button>
+                    <button onClick={() => handleDelete(item.id)} className="btn btn-danger btn-sm">Hapus</button>
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr><td colSpan={5} className="empty-row">Tidak ada data</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
+
+        {showForm && (
+          <div className="modal-overlay">
+            <form onSubmit={handleSubmit} className="modal">
+              <h2 className="heading-lg" style={{ fontSize: "1.2rem", marginBottom: "1.1rem" }}>
+                {editing ? "Edit User" : "Tambah User"}
+              </h2>
+
+              <div className="field">
+                <label className="field-label">Nama</label>
+                <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="field-input" />
+              </div>
+
+              <div className="field">
+                <label className="field-label">Email</label>
+                <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="field-input" />
+              </div>
+
+              {!editing && (
+                <div className="field">
+                  <label className="field-label">Password</label>
+                  <input required type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="field-input" />
+                </div>
+              )}
+
+              <div className="field">
+                <label className="field-label">Role</label>
+                <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="field-input">
+                  <option value="admin">admin</option>
+                  <option value="operator">operator</option>
+                  <option value="viewer">viewer</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button type="submit" className="btn btn-primary" style={{ width: "auto" }}>Simpan</button>
+                <button type="button" onClick={() => setShowForm(false)} className="btn btn-secondary">Batal</button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
-
-      {error && <p style={{ color: "#dc2626", marginBottom: 12 }}>{error}</p>}
-
-      {/* [Pertemuan 15 - Prinsip keamanan] password baru ditampilkan sekali saja, bukan disimpan di UI */}
-      {tempPassword && (
-        <div
-          style={{
-            background: "#fefce8",
-            border: "1px solid #fde047",
-            padding: "0.75rem 1rem",
-            borderRadius: 8,
-            marginBottom: 16,
-            fontSize: "0.85rem",
-          }}
-        >
-          Password sementara: <strong>{tempPassword}</strong> — catat sekarang,
-          pesan ini tidak akan muncul lagi.{" "}
-          <button
-            onClick={() => setTempPassword(null)}
-            style={{ marginLeft: 8, border: "none", background: "none", cursor: "pointer" }}
-          >
-            Tutup
-          </button>
-        </div>
-      )}
-
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-        <thead>
-          <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-            <th style={thStyle}>Nama</th>
-            <th style={thStyle}>Email</th>
-            <th style={thStyle}>Role</th>
-            <th style={thStyle}>Dibuat</th>
-            <th style={thStyle}>Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((item) => (
-            <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <td style={tdStyle}>{item.name}</td>
-              <td style={tdStyle}>{item.email}</td>
-              <td style={tdStyle}>{item.role}</td>
-              <td style={tdStyle}>{new Date(item.created_at).toLocaleDateString("id-ID")}</td>
-              <td style={tdStyle}>
-                <button onClick={() => openEditForm(item)} style={smallButtonStyle}>
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleResetPassword(item.id)}
-                  style={{ ...smallButtonStyle, background: "#0891b2" }}
-                >
-                  Reset Password
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  style={{ ...smallButtonStyle, background: "#dc2626" }}
-                >
-                  Hapus
-                </button>
-              </td>
-            </tr>
-          ))}
-          {users.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "#64748b" }}>
-                Tidak ada data
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {showForm && (
-        <div style={modalOverlayStyle}>
-          <form onSubmit={handleSubmit} style={modalStyle}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 12 }}>
-              {editing ? "Edit User" : "Tambah User"}
-            </h2>
-
-            <label style={labelStyle}>Nama</label>
-            <input
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              style={inputStyle}
-            />
-
-            <label style={labelStyle}>Email</label>
-            <input
-              required
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              style={inputStyle}
-            />
-
-            {!editing && (
-              <>
-                <label style={labelStyle}>Password</label>
-                <input
-                  required
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  style={inputStyle}
-                />
-              </>
-            )}
-
-            <label style={labelStyle}>Role</label>
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              style={inputStyle}
-            >
-              <option value="admin">admin</option>
-              <option value="operator">operator</option>
-              <option value="viewer">viewer</option>
-            </select>
-
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="submit" style={buttonStyle}>
-                Simpan
-              </button>
-              <button type="button" onClick={() => setShowForm(false)} style={secondaryButtonStyle}>
-                Batal
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </main>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "0.55rem 0.7rem",
-  marginTop: 4,
-  marginBottom: 12,
-  borderRadius: 8,
-  border: "1px solid #cbd5e1",
-  fontSize: "0.85rem",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "0.78rem",
-  fontWeight: 600,
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: "0.55rem 1rem",
-  borderRadius: 8,
-  border: "none",
-  background: "#2563eb",
-  color: "#fff",
-  fontWeight: 600,
-  cursor: "pointer",
-  fontSize: "0.85rem",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  ...buttonStyle,
-  background: "#e2e8f0",
-  color: "#1e293b",
-  textDecoration: "none",
-  display: "inline-flex",
-  alignItems: "center",
-};
-
-const smallButtonStyle: React.CSSProperties = {
-  ...buttonStyle,
-  padding: "0.35rem 0.6rem",
-  fontSize: "0.78rem",
-  marginRight: 6,
-};
-
-const thStyle: React.CSSProperties = {
-  padding: "0.6rem",
-  fontWeight: 600,
-  fontSize: "0.8rem",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "0.6rem",
-};
-
-const modalOverlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.4)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "1rem",
-};
-
-const modalStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 12,
-  padding: "1.5rem",
-  width: "100%",
-  maxWidth: 420,
-};
