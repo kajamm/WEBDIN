@@ -41,8 +41,12 @@ export default function MahasiswaPage() {
   const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [error, setError] = useState("");
 
-  const user = getUser();
+  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
   const role = user?.role;
+
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
   const canCreate = role === "admin" || role === "operator";
   const canEdit = role === "admin" || role === "operator";
   const canDelete = role === "admin";

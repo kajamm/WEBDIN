@@ -18,7 +18,7 @@ import { getToken, getUser } from "../../lib/auth";
 
 export default function UsersPage() {
   const router = useRouter();
-  const currentUser = getUser();
+  const [currentUser, setCurrentUser] = useState<ReturnType<typeof getUser>>(null);
 
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [error, setError] = useState("");
