@@ -32,3 +32,30 @@ body {
 .font-display {
   font-family: 'Fraunces', serif;
 }
+
+/* ---------- Layout ---------- */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-content {
+  max-width: 1040px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  flex: 1;
+}
+
+.center-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(200, 155, 74, 0.06), transparent 40%),
+    var(--bg);
+}
