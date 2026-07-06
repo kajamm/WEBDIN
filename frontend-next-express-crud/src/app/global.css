@@ -96,3 +96,29 @@ body {
   margin: 0;
   line-height: 1.5;
 }
+
+/* ---------- Panel ---------- */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  position: relative;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brass), transparent 70%);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 2.25rem 2rem;
+}
