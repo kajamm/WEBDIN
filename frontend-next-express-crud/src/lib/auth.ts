@@ -2,6 +2,10 @@
 // Catatan keamanan (dari materi): untuk latihan awal token boleh disimpan di
 // localStorage. Untuk production, pertimbangkan HttpOnly Secure Cookie agar
 // token tidak mudah diakses JavaScript saat terjadi XSS.
+// File ini mengurus penyimpanan token login di localStorage browser.
+// Kenapa localStorage? Supaya user tidak perlu login ulang setiap kali
+// refresh halaman. Token ini nanti dikirim ke backend lewat header
+// Authorization di setiap request yang butuh login (lihat lib/api.ts).
 
 export type AuthUser = {
   id: number;

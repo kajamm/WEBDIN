@@ -58,6 +58,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Email atau password salah" });
     }
 
+    // bcrypt.compare() membandingkan password yang diinput user (plain text)
+    // dengan hash yang tersimpan di database. Fungsi ini otomatis
+    // menghitung ulang hash dari password input, lalu mencocokkannya —
+    // bukan mendekripsi hash yang tersimpan (karena bcrypt memang tidak
+    // bisa didekripsi, itu tujuannya).
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {

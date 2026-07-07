@@ -15,6 +15,11 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.middleware";
 
+// Fungsi ini menerima daftar role yang diizinkan (misal: "admin", "operator").
+// Cara pakainya: allowRoles("admin") artinya hanya user dengan role admin
+// yang boleh lewat middleware ini. Kalau role user tidak cocok dengan
+// daftar yang diizinkan, request langsung ditolak dengan status 403
+// (Forbidden) sebelum masuk ke controller.
 export const allowRoles = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {

@@ -17,7 +17,10 @@ export const getAllMahasiswa = async (req: Request, res: Response) => {
     // bertahap. Prisma otomatis melakukan parameterized query di balik
     // layar, jadi aman dari SQL injection tanpa perlu placeholder manual.
     const where: Prisma.MahasiswaWhereInput = {};
-
+    
+    // Query search: mencari NIM atau nama yang MENGANDUNG kata kunci
+    // (bukan harus sama persis), makanya pakai "contains".
+    // Contoh: cari "budi" akan menemukan "Budi Santoso" dan "Budiman".
     if (search) {
       where.OR = [
         { nim: { contains: search } },
