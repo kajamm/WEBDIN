@@ -12,6 +12,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+//konfigurasi koneksi ke Gmail pakai nodemailer
 export const mailer = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
   port: Number(process.env.MAIL_PORT) || 465,

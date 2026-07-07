@@ -9,6 +9,7 @@ import { mailer } from "../config/mail";
 
 // [Pertemuan 15 - Bagian 2: Read Daftar User]
 // Prinsip keamanan: JANGAN pernah `select` kolom password ke frontend.
+// Read: lihat semua user
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
@@ -38,6 +39,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
 };
 
 // [Pertemuan 15 - Bagian 3: Create User oleh Admin]
+// Create: tambah user baru
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
@@ -70,6 +72,7 @@ export const createUser = async (req: Request, res: Response) => {
 };
 
 // [Pertemuan 15 - Bagian 4: Update dan Delete User]
+// Update: edit data user
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -92,6 +95,7 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
+// Delete: hapus user
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -119,6 +123,7 @@ function generateTemporaryPassword() {
   return Math.random().toString(36).slice(-10);
 }
 
+// Reset password (versi manual oleh admin)
 export const resetPasswordByAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -150,6 +155,7 @@ export const resetPasswordByAdmin = async (req: Request, res: Response) => {
 // Alur: user minta reset -> backend generate token acak -> simpan HASH token
 // (bukan token mentah) ke tabel password_reset_tokens -> kirim token mentah
 // lewat email sebagai link.
+// Reset password (versi kirim email)
 export const requestPasswordReset = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
